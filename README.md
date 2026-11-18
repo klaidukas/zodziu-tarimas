@@ -2,6 +2,8 @@
 
 A Lithuanian-first app for learning to pronounce English vocabulary. Photograph or upload a vocabulary sheet, or scan it with the live camera. Tap a word to hear it, or open its options to listen slowly, fix it, mark it as learned, or delete it. Practice shows what the browser recognized and keeps your latest result for each word and your completed session count.
 
+Use **Tvarkyti** to remove several saved words at once, or choose **Pažymėti visus** to clear the list. Before scanning, leave **Kalbos lape** on automatic, or choose English and Lithuanian for a bilingual worksheet or English only for a plain English list.
+
 ## Run locally
 
 Install Node.js 22 or later, then run:
@@ -30,7 +32,7 @@ Open the deployment over HTTPS for camera and microphone access. No backend, acc
 
 ## Browser support and privacy
 
-- OCR processes images and video frames on the device. Printed English text in good lighting works best. The app keeps scan order, removes duplicates and filters obvious noise. English OCR can still include words from adjacent translations, especially when both languages use unaccented Latin text. Use chip options to correct the list.
+- OCR processes images and video frames on the device. The app filters detections using US and UK English dictionaries. On mixed worksheets with short bracketed pronunciation notes, it uses those notes to identify English entries. Blurred text may still be missed or misread as another English word. Use chip options or bulk selection to correct the list.
 - The browser supplies English playback voices. Available voices vary by device. If the preferred UK or US voice is missing, the app can use another English voice.
 - Speech recognition availability and permissions vary across browsers and devices. Try a recent Chrome or Safari if your browser cannot recognize speech. Recognition may require internet or send audio to a service chosen by the browser. Results indicate word matching only and give no pronunciation accuracy score.
 - Vocabulary, settings, and progress are saved in this browser profile. Clearing the list keeps historical practice totals. Clearing site data removes saved progress.

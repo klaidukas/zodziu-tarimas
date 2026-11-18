@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
@@ -18,7 +19,10 @@ export default defineConfig({
     generateBundle: {
       order: 'post',
       handler(_, bundle) {
-        const assets = Object.keys(bundle).filter(name => name.endsWith('.js') || name.endsWith('.css') || name.endsWith('.traineddata.gz'))
+        const assets = Object.keys(bundle).filter(name => /\.(?:js|css|traineddata\.gz|aff|dic)$/.test(name))
+        const notices = ['dictionary-en', 'dictionary-en-gb', 'nspell']
+          .map(name => readFileSync(new URL(`./node_modules/${name}/license`, import.meta.url), 'utf8'))
+        this.emitFile({ type: 'asset', fileName: 'dictionary-notices.txt', source: notices.join('\n\n') })
         const cache = 'zodziu-' + createHash('sha256').update(assets.join('|')).digest('hex').slice(0, 16)
         this.emitFile({ type: 'asset', fileName: 'sw.js', source: `
 const ROOT = self.registration.scope;

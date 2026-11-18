@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Plus, Video } from 'lucide-react'
-import { scanner, tokens, unique, type Detection } from './scanner'
+import { scanner, unique, type Detection, type ScanMode } from './scanner'
 import type { Copy } from './strings'
 
-export function Live({ t, saved, add, photo }: { t: Copy; saved: string[]; add: (words: string[]) => void; photo: () => void }) {
+export function Live({ t, saved, add, photo, mode }: { t: Copy; saved: string[]; add: (words: string[]) => void; photo: () => void; mode: ScanMode }) {
   const video = useRef<HTMLVideoElement>(null)
   const [status, setStatus] = useState<keyof Copy>('opening')
   const [frame, setFrame] = useState<{ hits: Detection[]; width: number; height: number }>()
@@ -48,7 +48,7 @@ export function Live({ t, saved, add, photo }: { t: Copy; saved: string[]; add: 
         return fail('cameraError')
       }
       try {
-        const { recognize } = await scanner(true, () => {}, signal)
+        const { recognize } = await scanner(true, mode, () => {}, signal)
         const canvas = document.createElement('canvas')
         const context = canvas.getContext('2d')!
         const scan = async () => {
@@ -58,14 +58,8 @@ export function Live({ t, saved, add, photo }: { t: Copy; saved: string[]; add: 
             const width = canvas.width = Math.round(player.videoWidth * scale)
             const height = canvas.height = Math.round(player.videoHeight * scale)
             context.drawImage(player, 0, 0, width, height)
-            const { data } = await recognize(canvas)
+            const hits = await recognize(canvas)
             if (signal.aborted) return
-            const hits = (data.blocks ?? [])
-              .flatMap(block => block.paragraphs)
-              .flatMap(paragraph => paragraph.lines)
-              .flatMap(line => line.words)
-              .filter(word => word.confidence >= 55)
-              .flatMap(word => tokens(word.text).map(text => ({ text: text.toLowerCase(), box: word.bbox })))
             setFrame({ hits, width, height })
             setStatus('waiting')
           }

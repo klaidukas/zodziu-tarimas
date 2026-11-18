@@ -92,6 +92,9 @@ dialog::backdrop { background:#141025a6 }
 .dialog-header h2 { font-size:1.35rem; letter-spacing:-.03em }
 dialog > p { margin-bottom:14px }
 .stack,.edit-form { display:grid; gap:10px }
+.scan-choice { display:grid; gap:5px; margin-bottom:14px; font-weight:650 }
+.bulk-actions { position:sticky; top:-20px; z-index:2; display:flex; flex-wrap:wrap; gap:8px; padding:8px 0; background:var(--surface) }
+.bulk-chip[aria-pressed="true"] { background:var(--tint); border-color:var(--primary) }
 .stack label:not(.file-button),.edit-form label { display:grid; gap:5px; font-weight:650 }
 .word-tools { margin-top:14px }
 .file-button { position:relative; cursor:pointer }

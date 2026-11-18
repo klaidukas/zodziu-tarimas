@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ArrowUpRight, AudioLines, BookOpen, Camera, Check, ImagePlus, Mic, MoreHorizontal, Settings2, Sparkles, Trash2, Video, Volume2, X } from 'lucide-react'
 import { strings, type Copy } from './strings'
-import { photoCanvas, scanner, tokens, unique } from './scanner'
+import { photoCanvas, scanner, tokens, unique, type ScanMode } from './scanner'
 import { Live } from './Live'
 import { Practice, type Outcome } from './Practice'
 import './style.css'
@@ -15,8 +15,9 @@ type Data = {
   language: keyof typeof strings
   theme: 'system' | 'light' | 'dark'
   accent: 'en-GB' | 'en-US'
+  scanMode: ScanMode
 }
-const initial: Data = { words: [], progress: {}, sessions: 0, language: 'lt', theme: 'system', accent: 'en-GB' }
+const initial: Data = { words: [], progress: {}, sessions: 0, language: 'lt', theme: 'system', accent: 'en-GB', scanMode: 'auto' }
 const storageKey = 'zodziu-tarimas-v1'
 function load(): Data {
   try {
@@ -26,7 +27,7 @@ function load(): Data {
   }
 }
 
-type Panel = 'photo' | 'live' | 'settings' | 'clear' | 'word' | 'practice'
+type Panel = 'photo' | 'live' | 'settings' | 'bulk' | 'word' | 'practice'
 function DialogBody({ dialog, title, close, children, dismiss }: {
   dialog: React.RefObject<HTMLDialogElement | null>; title: string; close: string; children: ReactNode;
   dismiss: React.RefObject<(() => void) | undefined>
@@ -57,6 +58,8 @@ function App() {
   const [photoStatus, setPhotoStatus] = useState<keyof Copy>()
   const [percent, setPercent] = useState(0)
   const [selected, setSelected] = useState('')
+  const [bulkSelection, setBulkSelection] = useState<Set<string>>(() => new Set())
+  const [bulkConfirm, setBulkConfirm] = useState(false)
   const [draft, setDraft] = useState('')
   const [editError, setEditError] = useState<keyof Copy>()
   const [session, setSession] = useState<{ id: number; words: string[] }>({ id: 0, words: [] })
@@ -115,14 +118,14 @@ function App() {
     setPercent(0)
     try {
       const canvas = await photoCanvas(file)
-      const { recognize, stop } = await scanner(false, message => {
+      const { recognize, stop } = await scanner(false, data.scanMode, message => {
         if (message.status === 'recognizing text' && !signal.aborted) setPercent(message.progress)
       }, signal)
       try {
         setPhotoStatus('scanning')
-        const { data: result } = await recognize(canvas)
+        const hits = await recognize(canvas)
         if (signal.aborted) return
-        const words = tokens(result.text)
+        const words = hits.map(hit => hit.text)
         if (words.length) {
           add(words)
           close()
@@ -184,8 +187,18 @@ function App() {
     setData(current => ({ ...current, words: current.words.map(word => word.text === selected ? { ...word, text } : word) }))
     close()
   }
-  const titles = { photo: t.photo, live: t.live, settings: t.settings, clear: t.clear, word: t.options, practice: t.practice }
+  const titles = { photo: t.photo, live: t.live, settings: t.settings, bulk: t.manageWords, word: t.options, practice: t.practice }
   const busy = photoStatus === 'loading' || photoStatus === 'scanning'
+  const scanChoice = <label className="scan-choice">{t.sheetLanguage}
+    <select value={data.scanMode} disabled={busy} onChange={event => {
+      const scanMode = event.target.value as ScanMode
+      setData(current => ({ ...current, scanMode }))
+    }}>
+      <option value="auto">{t.autoDetect}</option>
+      <option value="mixed">{t.mixedSheet}</option>
+      <option value="english">{t.englishSheet}</option>
+    </select>
+  </label>
   const fileInput = (capture: boolean) => <label className={`button file-button ${capture ? 'primary' : 'secondary'}`}>
     {capture ? <Camera size={20} /> : <ImagePlus size={20} />}{capture ? t.take : t.upload}
     <input type="file" accept="image/*" capture={capture ? 'environment' : undefined} disabled={busy}
@@ -226,7 +239,9 @@ function App() {
       <section className="word-section" aria-labelledby="words-title">
         <div className="section-header">
           <h2 id="words-title">{t.words} <span className="count">{saved.length}</span></h2>
-          {saved.length > 0 && <button className="text-button" onClick={() => setPanel('clear')}><Trash2 size={16} />{t.clear}</button>}
+          {saved.length > 0 && <button className="text-button" onClick={() => {
+            setBulkSelection(new Set()); setBulkConfirm(false); setPanel('bulk')
+          }}><Trash2 size={16} />{t.manageWords}</button>}
         </div>
         {saved.length ? <>
           <ul className="chips">
@@ -253,15 +268,44 @@ function App() {
     </main>
     {panel && <DialogBody key={panel} dialog={dialog} dismiss={dismiss} title={titles[panel]} close={t.close}>
       {panel === 'photo' && <>
+        {scanChoice}
         <p className="muted">{t.photoHelp}</p>
         <div className="stack">{fileInput(true)}{fileInput(false)}</div>
         {photoStatus && <p role="status">{t[photoStatus]}</p>}
         {photoStatus === 'scanning' && <progress max={1} value={percent} aria-label={t.scanning} />}
       </>}
-      {panel === 'live' && <Live t={t} saved={saved} add={add} photo={() => setPanel('photo')} />}
-      {panel === 'clear' && <>
-        <p>{t.clearAsk}</p><p className="muted">{t.clearNote}</p>
-        <button className="button danger" onClick={() => { setData(current => ({ ...current, words: [] })); setNotice(''); close() }}>{t.clear}</button>
+      {panel === 'live' && <>{scanChoice}<Live key={data.scanMode} mode={data.scanMode} t={t} saved={saved} add={add} photo={() => setPanel('photo')} /></>}
+      {panel === 'bulk' && <>
+        {bulkConfirm ? <>
+          <p>{bulkSelection.size === saved.length ? t.clearAsk : t.removeSelectedAsk} <b>({bulkSelection.size})</b></p>
+          <p className="muted">{t.clearNote}</p>
+          <div className="bulk-actions">
+            <button className="button secondary" onClick={() => setBulkConfirm(false)}>{t.back}</button>
+            <button className="button danger" onClick={() => {
+              setData(current => ({ ...current, words: current.words.filter(word => !bulkSelection.has(word.text)) }))
+              setNotice(`${t.removedWords} · ${bulkSelection.size}`)
+              close()
+            }}>{t.remove}</button>
+          </div>
+        </> : <>
+          <div className="bulk-actions">
+            <button className="button secondary" onClick={() => setBulkSelection(
+              bulkSelection.size === saved.length ? new Set() : new Set(saved)
+            )}>{bulkSelection.size === saved.length ? t.clearSelection : t.selectAll}</button>
+            <button className="button danger" disabled={!bulkSelection.size} onClick={() => setBulkConfirm(true)}>
+              <Trash2 size={17} />{t.removeSelected} · {bulkSelection.size}
+            </button>
+          </div>
+          <div className="chips" role="group" aria-label={t.manageWords}>
+            {saved.map(text => <button type="button" key={text} className="single-chip bulk-chip" lang="en"
+              aria-pressed={bulkSelection.has(text)} onClick={() => setBulkSelection(previous => {
+                const next = new Set(previous)
+                if (next.has(text)) next.delete(text)
+                else next.add(text)
+                return next
+              })}>{bulkSelection.has(text) && <Check size={16} />}{text}</button>)}
+          </div>
+        </>}
       </>}
       {panel === 'word' && chosen && <>
         <form className="edit-form" onSubmit={event => { event.preventDefault(); edit() }}>
