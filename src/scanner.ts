@@ -1,4 +1,5 @@
 import type { Bbox, Page, Word, Worker } from 'tesseract.js'
+import { learningLanguage } from './learning'
 import workerUrl from 'tesseract.js/dist/worker.min.js?url'
 import coreUrl from 'tesseract.js-core/tesseract-core-lstm.wasm.js?url'
 import modelUrl from '@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz?url'
@@ -72,7 +73,7 @@ export async function scanner(live: boolean, mode: ScanMode, logger: (message: {
       reject(error)
     }
     const timer = window.setTimeout(() => fail(new Error('OCR initialization timed out')), 45000)
-    void createWorker('eng', 1, {
+    void createWorker(learningLanguage.ocrModel, 1, {
       logger,
       errorHandler: error => { if (!initialized) fail(error) },
       workerBlobURL: false,

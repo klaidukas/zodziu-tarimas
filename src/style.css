@@ -109,13 +109,15 @@ select,input:not([type=file]) { width:100%; min-height:45px; padding:8px 12px; b
 .stats { margin:0; display:grid; gap:7px }
 .stats div { display:flex; justify-content:space-between; gap:12px; padding:8px 10px; border-radius:8px; background:var(--page) }
 .stats dd { margin:0; font-weight:800 }
-.viewfinder { position:relative; display:grid; place-items:center; background:#181426; overflow:hidden; border-radius:16px; margin:10px 0 }
+.viewfinder { position:relative; display:grid; place-items:center; aspect-ratio:4/3; max-height:50dvh; background:#181426; overflow:hidden; border-radius:16px; margin:10px 0 }
 .viewfinder[hidden] { display:none }
-.viewfinder video { display:block; width:100%; height:auto; aspect-ratio:4/3; visibility:hidden }
-.viewfinder video.ready { aspect-ratio:auto; visibility:visible }
+.viewfinder video,.ocr-overlay { position:absolute; inset:0; display:block; width:100%; height:100% }
+.viewfinder video { object-fit:contain; object-position:center; visibility:hidden }
+.viewfinder video.ready { visibility:visible }
 .camera-placeholder { position:absolute; color:#dad1ee }
-.ocr-box { position:absolute; padding:0; background:#5bfdc13b; border:1px solid #9dffce; border-radius:3px }
-.ocr-box:disabled { background:transparent }
+.ocr-overlay { pointer-events:none }
+.ocr-box { fill:#5bfdc13b; stroke:#9dffce; stroke-width:1.5px; pointer-events:all; cursor:pointer }
+.ocr-box[data-saved="true"] { fill:transparent; pointer-events:none }
 .live-chips:empty { display:none }
 .practice { text-align:center }
 .progress-label { color:var(--muted); font-size:.84rem }

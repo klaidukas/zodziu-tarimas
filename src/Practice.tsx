@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, Check, Mic, RotateCcw, Volume2 } from 'lucide-react'
-import type { Copy } from './strings'
+import type { Copy, TextKey } from './strings'
+import { learningLanguage } from './learning'
 
 export type Outcome = 'correct' | 'retry' | 'unclear'
 type Result = { outcome: Outcome; heard: string }
@@ -27,7 +28,7 @@ export function Practice({ t, words, accent, speak, record, complete, restart }:
   const [index, setIndex] = useState(0)
   const [results, setResults] = useState<Record<string, Result>>({})
   const [listening, setListening] = useState<'opening' | 'active' | false>(false)
-  const [error, setError] = useState<keyof Copy>()
+  const [error, setError] = useState<TextKey>()
   const [done, setDone] = useState(false)
   const recognizer = useRef<Recognition | null>(null)
   const timeout = useRef<number>(undefined)
@@ -64,7 +65,7 @@ export function Practice({ t, words, accent, speak, record, complete, restart }:
     recognition.continuous = false
     recognition.interimResults = false
     recognition.maxAlternatives = 1
-    const finish = (outcome?: Outcome, heard = '', issue?: keyof Copy) => {
+    const finish = (outcome?: Outcome, heard = '', issue?: TextKey) => {
       if (recognizer.current !== recognition) return
       stop()
       setListening(false)
@@ -105,7 +106,7 @@ export function Practice({ t, words, accent, speak, record, complete, restart }:
     </> : <>
       <div className="progress-label"><span>{t.practiced}</span><strong>{count} / {words.length}</strong></div>
       <progress value={count} max={words.length} aria-label={t.practiced} />
-      <p className="prompt-word" lang="en">{word}</p>
+      <p className="prompt-word" lang={learningLanguage.lang}>{word}</p>
       {SpeechRecognition ? <>
         <button className={`mic ${listening ? 'listening' : ''}`} disabled={!!listening}
           aria-label={result ? t.retry : t.say} onClick={listen}><Mic size={33} /></button>
@@ -114,8 +115,8 @@ export function Practice({ t, words, accent, speak, record, complete, restart }:
       {error && <p role="alert" className="feedback retry">{t[error]}</p>}
       {result && !listening && <div className={`feedback ${result.outcome}`} role="status">
         <strong>{t[result.outcome]}</strong>
-        {result.outcome !== 'correct' && <p>{t.expected} <b lang="en">{word}</b></p>}
-        {result.heard && <p>{t.heard} <b lang="en">“{result.heard}”</b></p>}
+        {result.outcome !== 'correct' && <p>{t.expected} <b lang={learningLanguage.lang}>{word}</b></p>}
+        {result.heard && <p>{t.heard} <b lang={learningLanguage.lang}>“{result.heard}”</b></p>}
       </div>}
       <div className="practice-controls">
         <button className="button secondary" disabled={!!listening} onClick={() => speak(word)}><Volume2 size={18} />{t.listen}</button>

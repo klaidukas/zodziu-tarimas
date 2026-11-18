@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ArrowUpRight, AudioLines, BookOpen, Camera, Check, ImagePlus, Mic, MoreHorizontal, Settings2, Sparkles, Trash2, Video, Volume2, X } from 'lucide-react'
-import { strings, type Copy } from './strings'
+import { defaultUiLanguage, strings, uiLanguages, type TextKey, type UiLanguage } from './strings'
+import { learningLanguage } from './learning'
 import { photoCanvas, scanner, tokens, unique, type ScanMode } from './scanner'
 import { Live } from './Live'
 import { Practice, type Outcome } from './Practice'
-import { rankedEnglishVoices, voiceKey } from './voices'
+import { chooseVoice, savedProfile, voiceChoices, voiceLabel } from './voices'
 import './style.css'
 
 type Word = { text: string; learned: boolean }
@@ -13,21 +14,23 @@ type Data = {
   words: Word[]
   progress: Record<string, Outcome>
   sessions: number
-  language: keyof typeof strings
+  language: UiLanguage
   theme: 'system' | 'light' | 'dark'
-  accent: 'en-GB' | 'en-US'
+  accent: typeof learningLanguage.speechLocales[number]
   voice: string
   slowRate: number
   scanMode: ScanMode
 }
 const initial: Data = {
-  words: [], progress: {}, sessions: 0, language: 'lt', theme: 'system',
-  accent: 'en-GB', voice: '', slowRate: 65, scanMode: 'auto',
+  words: [], progress: {}, sessions: 0, language: defaultUiLanguage, theme: 'system',
+  accent: learningLanguage.speechLocales[0], voice: '', slowRate: 65, scanMode: 'auto',
 }
 const storageKey = 'zodziu-tarimas-v1'
 function load(): Data {
   try {
-    return { ...initial, ...JSON.parse(localStorage.getItem(storageKey) ?? '{}') }
+    const data = { ...initial, ...JSON.parse(localStorage.getItem(storageKey) ?? '{}') }
+    if (!Object.hasOwn(uiLanguages, data.language)) data.language = defaultUiLanguage
+    return data
   } catch {
     return initial
   }
@@ -58,17 +61,17 @@ function DialogBody({ dialog, title, close, children, dismiss }: {
 function App() {
   const [data, setData] = useState(load)
   const [panel, setPanel] = useState<Panel | null>(null)
-  const [notice, setNotice] = useState('')
+  const [notice, setNotice] = useState<{ key: 'added' | 'already' | 'removedWords' | 'noVoice' | 'voiceOffline'; count?: number }>()
   const [storageError, setStorageError] = useState(false)
   const [speaking, setSpeaking] = useState('')
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([])
-  const [photoStatus, setPhotoStatus] = useState<keyof Copy>()
+  const [photoStatus, setPhotoStatus] = useState<TextKey>()
   const [percent, setPercent] = useState(0)
   const [selected, setSelected] = useState('')
   const [bulkSelection, setBulkSelection] = useState<Set<string>>(() => new Set())
   const [bulkConfirm, setBulkConfirm] = useState(false)
   const [draft, setDraft] = useState('')
-  const [editError, setEditError] = useState<keyof Copy>()
+  const [editError, setEditError] = useState<TextKey>()
   const [session, setSession] = useState<{ id: number; words: string[] }>({ id: 0, words: [] })
   const photoJob = useRef<AbortController | null>(null)
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
@@ -78,10 +81,10 @@ function App() {
   const saved = data.words.map(word => word.text)
   const difficult = saved.filter(word => Object.hasOwn(data.progress, word) && data.progress[word] !== 'correct')
   const chosen = data.words.find(word => word.text === selected)
-  const englishVoices = rankedEnglishVoices(availableVoices, data.accent)
-  const selectedVoice = englishVoices.find(voice => voiceKey(voice) === data.voice)
-  const automaticVoice = (navigator.onLine ? englishVoices : englishVoices.filter(voice => voice.localService))[0]
-  const previewWord = saved[0] ?? 'beautiful'
+  const voices = voiceChoices(availableVoices, data.accent)
+  const selectedVoice = savedProfile(data.voice, availableVoices)
+  const previewWord = saved[0] ?? learningLanguage.previewWord
+  const noticeText = notice && (notice.count === undefined ? t[notice.key] : `${t[notice.key]} · ${notice.count}`)
 
   useEffect(() => {
     const synth = window.speechSynthesis
@@ -100,13 +103,14 @@ function App() {
   useEffect(() => {
     document.documentElement.lang = data.language
     document.documentElement.dataset.theme = data.theme
+    document.title = t.name
     try {
       localStorage.setItem(storageKey, JSON.stringify(data))
       setStorageError(false)
     } catch {
       setStorageError(true)
     }
-  }, [data])
+  }, [data, t.name])
 
   useEffect(() => {
     const release = () => {
@@ -128,7 +132,7 @@ function App() {
   const add = (words: string[]) => {
     const incoming = unique(words)
     const count = incoming.filter(word => !saved.includes(word)).length
-    setNotice(count ? `${t.added} · ${count}` : t.already)
+    setNotice(count ? { key: 'added', count } : { key: 'already' })
     setData(current => {
       const existing = new Set(current.words.map(word => word.text))
       return { ...current, words: [...current.words, ...incoming.filter(word => !existing.has(word)).map(text => ({ text, learned: false }))] }
@@ -167,21 +171,18 @@ function App() {
 
   const speak = (word: string, slow = false) => {
     const synth = window.speechSynthesis
-    if (!synth || !window.SpeechSynthesisUtterance) return setNotice(t.noVoice)
+    if (!synth || !window.SpeechSynthesisUtterance) return setNotice({ key: 'noVoice' })
+    const preferred = chooseVoice(synth.getVoices(), data.accent, data.voice, navigator.onLine)
+    if (!preferred) return setNotice({ key: navigator.onLine ? 'noVoice' : 'voiceOffline' })
     const voice = new SpeechSynthesisUtterance(word)
-    const voices = synth.getVoices()
-    const english = rankedEnglishVoices(voices, data.accent)
-    const playable = navigator.onLine ? english : english.filter(item => item.localService)
-    const preferred = playable.find(item => voiceKey(item) === data.voice) ?? playable[0]
-    if (voices.length && !preferred) return setNotice(!navigator.onLine && english.length ? t.voiceOffline : t.noVoice)
     utteranceRef.current = null
     synth.cancel()
-    if (preferred) voice.voice = preferred
-    voice.lang = preferred?.lang.replaceAll('_', '-') ?? data.accent
+    voice.voice = preferred
+    voice.lang = preferred.lang.replaceAll('_', '-')
     voice.rate = slow ? data.slowRate / 100 : 1
     utteranceRef.current = voice
     setSpeaking(word)
-    setNotice('')
+    setNotice(undefined)
     voice.onend = () => {
       if (utteranceRef.current !== voice) return
       utteranceRef.current = null
@@ -191,7 +192,7 @@ function App() {
       if (utteranceRef.current !== voice) return
       utteranceRef.current = null
       setSpeaking('')
-      if (!['interrupted', 'canceled'].includes(event.error)) setNotice(event.error === 'network' ? t.voiceOffline : t.noVoice)
+      if (!['interrupted', 'canceled'].includes(event.error)) setNotice({ key: event.error === 'network' ? 'voiceOffline' : 'noVoice' })
     }
     synth.speak(voice)
   }
@@ -286,7 +287,7 @@ function App() {
           <ul className="chips">
             {data.words.map(({text, learned}) => <li key={text} className={`chip ${speaking === text ? 'speaking' : ''} ${learned ? 'learned' : ''}`}>
               <button className="say-word" onClick={() => speak(text)} aria-label={`${t.listen}: ${text}`}>
-                {learned && <Check size={16} aria-label={t.learned} />}<span lang="en">{text}</span><Volume2 size={17} />
+                {learned && <Check size={16} aria-label={t.learned} />}<span lang={learningLanguage.lang}>{text}</span><Volume2 size={17} />
               </button>
               <button className="chip-options" onClick={() => {
                 setSelected(text); setDraft(text); setEditError(undefined); setPanel('word')
@@ -302,8 +303,8 @@ function App() {
         </div>}
       </section>
       <footer><span className="privacy-dot" />{t.local}</footer>
-      {(notice || storageError) && <p className="notice" role="status">{storageError ? t.storage : notice}
-        {notice && <button className="icon-button" aria-label={t.close} onClick={() => setNotice('')}><X size={17} /></button>}</p>}
+      {(notice || storageError) && <p className="notice" role="status">{storageError ? t.storage : noticeText}
+        {notice && <button className="icon-button" aria-label={t.close} onClick={() => setNotice(undefined)}><X size={17} /></button>}</p>}
     </main>
     {panel && <DialogBody key={panel} dialog={dialog} dismiss={dismiss} title={titles[panel]} close={t.close}>
       {panel === 'photo' && <>
@@ -322,7 +323,7 @@ function App() {
             <button className="button secondary" onClick={() => setBulkConfirm(false)}>{t.back}</button>
             <button className="button danger" onClick={() => {
               setData(current => ({ ...current, words: current.words.filter(word => !bulkSelection.has(word.text)) }))
-              setNotice(`${t.removedWords} · ${bulkSelection.size}`)
+              setNotice({ key: 'removedWords', count: bulkSelection.size })
               close()
             }}>{t.remove}</button>
           </div>
@@ -336,7 +337,7 @@ function App() {
             </button>
           </div>
           <div className="chips" role="group" aria-label={t.manageWords}>
-            {saved.map(text => <button type="button" key={text} className="single-chip bulk-chip" lang="en"
+            {saved.map(text => <button type="button" key={text} className="single-chip bulk-chip" lang={learningLanguage.lang}
               aria-pressed={bulkSelection.has(text)} onClick={() => setBulkSelection(previous => {
                 const next = new Set(previous)
                 if (next.has(text)) next.delete(text)
@@ -348,7 +349,7 @@ function App() {
       </>}
       {panel === 'word' && chosen && <>
         <form className="edit-form" onSubmit={event => { event.preventDefault(); edit() }}>
-          <label>{t.edit}<input value={draft} lang="en" autoComplete="off" autoCapitalize="none" spellCheck={false} onChange={event => setDraft(event.target.value)} /></label>
+          <label>{t.edit}<input value={draft} lang={learningLanguage.lang} autoComplete="off" autoCapitalize="none" spellCheck={false} onChange={event => setDraft(event.target.value)} /></label>
           {editError && <p role="alert">{t[editError]}</p>}
           <button className="button primary">{t.save}</button>
         </form>
@@ -366,26 +367,29 @@ function App() {
         </div>
       </>}
       {panel === 'settings' && <div className="stack">
-        <label>{t.language}<select value={data.language} onChange={event => setData({ ...data, language: event.target.value as Data['language'] })}>
-          <option value="lt" lang="lt">Lietuvių</option><option value="en" lang="en">English</option>
+        <label>{t.language}<select value={data.language} onChange={event => {
+          const language = event.target.value as UiLanguage
+          setData(current => ({ ...current, language }))
+        }}>
+          {Object.entries(uiLanguages).map(([code, name]) => <option key={code} value={code} lang={code}>{name}</option>)}
         </select></label>
         <label>{t.accent}<select value={data.accent} onChange={event => setData({ ...data, accent: event.target.value as Data['accent'] })}>
-          <option value="en-GB">English (UK)</option><option value="en-US">English (US)</option>
+          {learningLanguage.speechLocales.map(locale => <option key={locale} value={locale}>{t.voiceLocales[locale]}</option>)}
         </select></label>
-        <label>{t.voiceName}<select value={selectedVoice ? data.voice : ''} onChange={event => {
+        <label>{t.voiceName}<select value={voices.some(voice => voice.id === selectedVoice) ? selectedVoice : ''} onChange={event => {
           const voice = event.target.value
           setData(current => ({ ...current, voice }))
         }}>
-          <option value="">{t.autoVoice}{automaticVoice ? ` · ${automaticVoice.name}` : ''}</option>
-          {englishVoices.map(voice => <option key={voiceKey(voice)} value={voiceKey(voice)}>
-            {voice.name} ({voice.lang}){voice.localService ? '' : ` · ${t.onlineVoice}`}
+          <option value="">{t.autoVoice}</option>
+          {voices.map(voice => <option key={voice.id} value={voice.id}>
+            {voiceLabel(voice, t)}{voice.options.some(option => option.localService) ? '' : ` · ${t.onlineVoice}`}
           </option>)}
         </select></label>
-        <p className="muted">{englishVoices.length ? t.voiceHint : t.voiceUnavailable}</p>
+        <p className="muted">{voices.length ? t.voiceHint : t.voiceUnavailable}</p>
         {slowSpeed}
         <div className="practice-controls voice-preview">
-          <button className="button secondary" onClick={() => speak(previewWord)}><Volume2 size={18} />{t.previewVoice}</button>
-          <button className="button secondary" onClick={() => speak(previewWord, true)}>{t.slow}</button>
+          <button className="button secondary" disabled={!voices.length} onClick={() => speak(previewWord)}><Volume2 size={18} />{t.previewVoice}</button>
+          <button className="button secondary" disabled={!voices.length} onClick={() => speak(previewWord, true)}>{t.slow}</button>
         </div>
         <label>{t.theme}<select value={data.theme} onChange={event => setData({ ...data, theme: event.target.value as Data['theme'] })}>
           <option value="system">{t.system}</option><option value="light">{t.light}</option><option value="dark">{t.dark}</option>
@@ -401,7 +405,7 @@ function App() {
       {panel === 'practice' && <Practice key={session.id} t={t} words={session.words} accent={data.accent} speak={speak} restart={start}
         record={(word, outcome) => setData(current => ({ ...current, progress: { ...current.progress, [word]: outcome } }))}
         complete={() => setData(current => ({ ...current, sessions: current.sessions + 1 }))} />}
-      {(notice === t.noVoice || notice === t.voiceOffline) && <p role="alert">{notice}</p>}
+      {(notice?.key === 'noVoice' || notice?.key === 'voiceOffline') && <p role="alert">{noticeText}</p>}
     </DialogBody>}
   </>
 }

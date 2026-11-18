@@ -1,5 +1,8 @@
-export const strings = {
-  lt: {
+export const defaultUiLanguage = 'lt'
+export const uiLanguages = { lt: 'Lietuvių (LT)', en: 'English (EN)' }
+export type UiLanguage = keyof typeof uiLanguages
+
+const lt = {
     name:'Žodžių tarimas', settings:'Nustatymai', close:'Uždaryti', back:'Grįžti',
     title:'Anglų kalbos tarimas', intro:'Nuskenuok žodžius, išgirsk jų tarimą ir pabandyk pats.',
     photo:'Fotografuoti', photoHint:'Nuotrauka arba paveikslėlis', live:'Tiesioginė kamera', liveHint:'Atpažink žodžius gyvai',
@@ -22,8 +25,10 @@ export const strings = {
     duplicate:'Šis žodis jau yra sąraše.', noVoice:'Nepavyko paleisti tarimo. Patikrink, ar įrenginyje įdiegtas angliškas balsas.',
     language:'Sąsajos kalba', accent:'Pageidaujamas akcentas', theme:'Išvaizda', system:'Pagal įrenginį', light:'Šviesi', dark:'Tamsi',
     voiceName:'Tarimo balsas', autoVoice:'Automatiškai', onlineVoice:'Internetinis', previewVoice:'Išbandyti balsą',
+    femaleVoice:'Moteriškas balsas', maleVoice:'Vyriškas balsas',
+    voiceLocales: { 'en-GB':'Britų anglų', 'en-US':'JAV anglų' } as Record<string, string>,
     slowSpeed:'Lėto tarimo greitis', voiceHint:'Balsus pateikia įrenginys ir naršyklė. Internetiniams balsams gali reikėti ryšio.',
-    voiceUnavailable:'Naršyklė dar nerodo angliškų balsų. Patikrink įrenginio balso nustatymus.',
+    voiceUnavailable:'Tinkamo angliško balso nerasta. Patikrink įrenginio balso nustatymus.',
     voiceOffline:'Balsas nepasiekiamas. Patikrink ryšį arba pasirink įrenginyje veikiantį balsą.',
     progress:'Treniruočių pažanga', practiced:'Praktikuota žodžių', correct:'Atpažinta teisingai', retry:'Bandyk dar kartą',
     unclear:'Nepavyko suprasti', completed:'Baigtos treniruotės', next:'Kitas žodis', finish:'Baigti', sessionsDone:'Treniruotė baigta!',
@@ -34,9 +39,12 @@ export const strings = {
     micError:'Mikrofonas nepasiekiamas. Patikrink naršyklės leidimus ir įrenginio nustatymus.',
     network:'Kalbos atpažinimo paslauga nepasiekiama. Patikrink interneto ryšį.',
     local:'Nuotraukos apdorojamos šiame įrenginyje.', storage:'Naršyklė negali išsaugoti pakeitimų šiame įrenginyje.',
-  },
+}
+
+export const strings = {
+  lt,
   en: {
-    name:'Žodžių tarimas', settings:'Settings', close:'Close', back:'Back',
+    name:'Word Pronunciation', settings:'Settings', close:'Close', back:'Back',
     title:'English pronunciation', intro:'Scan words, listen to them, then try saying them aloud.',
     photo:'Take picture', photoHint:'Take or upload a photo', live:'Live camera', liveHint:'Recognize words live',
     words:'My words', empty:'Your words go here', emptyHint:'Take a photo of your vocabulary sheet, then tap a word to hear it.',
@@ -58,8 +66,10 @@ export const strings = {
     duplicate:'This word is already in your list.', noVoice:'Could not play pronunciation. Check that an English voice is installed.',
     language:'Interface language', accent:'Preferred accent', theme:'Appearance', system:'System', light:'Light', dark:'Dark',
     voiceName:'Pronunciation voice', autoVoice:'Automatic', onlineVoice:'Online', previewVoice:'Preview voice',
+    femaleVoice:'Female voice', maleVoice:'Male voice',
+    voiceLocales: { 'en-GB':'British English', 'en-US':'American English' } as Record<string, string>,
     slowSpeed:'Slow playback speed', voiceHint:'Voices come from your device and browser. Online voices may need a connection.',
-    voiceUnavailable:'The browser has not listed any English voices yet. Check your device’s voice settings.',
+    voiceUnavailable:'No suitable English voice is available. Check your device’s voice settings.',
     voiceOffline:'Voice unavailable. Check your connection or choose a voice that runs on your device.',
     progress:'Practice progress', practiced:'Words practiced', correct:'Recognized correctly', retry:'Try again',
     unclear:'Could not understand', completed:'Completed sessions', next:'Next word', finish:'Finish', sessionsDone:'Practice complete!',
@@ -71,6 +81,7 @@ export const strings = {
     network:'The speech recognition service is unavailable. Check your internet connection.',
     local:'Photos are processed on this device.', storage:'The browser could not save changes on this device.',
   },
-}
+} satisfies Record<UiLanguage, typeof lt>
 
 export type Copy = typeof strings.lt
+export type TextKey = Exclude<keyof Copy, 'voiceLocales'>
