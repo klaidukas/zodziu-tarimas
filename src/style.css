@@ -92,6 +92,10 @@ dialog::backdrop { background:#141025a6 }
 .dialog-header h2 { font-size:1.35rem; letter-spacing:-.03em }
 dialog > p { margin-bottom:14px }
 .stack,.edit-form { display:grid; gap:10px }
+.speed-field { display:grid; gap:4px; font-weight:650 }
+.speed-field span { display:flex; flex-wrap:wrap; justify-content:space-between; gap:6px }
+.speed-field input[type=range] { height:44px; margin:0; padding:0; border:0; background:transparent; accent-color:var(--primary); cursor:pointer }
+.voice-preview { justify-content:flex-start; margin:0 0 6px }
 .scan-choice { display:grid; gap:5px; margin-bottom:14px; font-weight:650 }
 .bulk-actions { position:sticky; top:-20px; z-index:2; display:flex; flex-wrap:wrap; gap:8px; padding:8px 0; background:var(--surface) }
 .bulk-chip[aria-pressed="true"] { background:var(--tint); border-color:var(--primary) }

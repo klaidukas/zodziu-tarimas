@@ -33,7 +33,7 @@ Open the deployment over HTTPS for camera and microphone access. No backend, acc
 ## Browser support and privacy
 
 - OCR processes images and video frames on the device. The app filters detections using US and UK English dictionaries. On mixed worksheets with short bracketed pronunciation notes, it uses those notes to identify English entries. Blurred text may still be missed or misread as another English word. Use chip options or bulk selection to correct the list.
-- The browser supplies English playback voices. Available voices vary by device. If the preferred UK or US voice is missing, the app can use another English voice.
+- Choose or preview an English voice under **Settings → Pronunciation voice**. Automatic selection favors your preferred accent and gives priority to voices labeled Natural, Enhanced, or Premium within that accent. Available voices vary by browser and device, and online voices may require a connection. Adjust slow playback from 45% to 95% in Settings or a word's options. On iPhone, [Apple's voice settings](https://support.apple.com/en-us/111798) let you download enhanced voices, which the app can offer if Safari exposes them.
 - Speech recognition availability and permissions vary across browsers and devices. Try a recent Chrome or Safari if your browser cannot recognize speech. Recognition may require internet or send audio to a service chosen by the browser. Results indicate word matching only and give no pronunciation accuracy score.
 - Vocabulary, settings, and progress are saved in this browser profile. Clearing the list keeps historical practice totals. Clearing site data removes saved progress.
 

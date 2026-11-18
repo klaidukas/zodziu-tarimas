@@ -5,6 +5,7 @@ import { strings, type Copy } from './strings'
 import { photoCanvas, scanner, tokens, unique, type ScanMode } from './scanner'
 import { Live } from './Live'
 import { Practice, type Outcome } from './Practice'
+import { rankedEnglishVoices, voiceKey } from './voices'
 import './style.css'
 
 type Word = { text: string; learned: boolean }
@@ -15,9 +16,14 @@ type Data = {
   language: keyof typeof strings
   theme: 'system' | 'light' | 'dark'
   accent: 'en-GB' | 'en-US'
+  voice: string
+  slowRate: number
   scanMode: ScanMode
 }
-const initial: Data = { words: [], progress: {}, sessions: 0, language: 'lt', theme: 'system', accent: 'en-GB', scanMode: 'auto' }
+const initial: Data = {
+  words: [], progress: {}, sessions: 0, language: 'lt', theme: 'system',
+  accent: 'en-GB', voice: '', slowRate: 65, scanMode: 'auto',
+}
 const storageKey = 'zodziu-tarimas-v1'
 function load(): Data {
   try {
@@ -55,6 +61,7 @@ function App() {
   const [notice, setNotice] = useState('')
   const [storageError, setStorageError] = useState(false)
   const [speaking, setSpeaking] = useState('')
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([])
   const [photoStatus, setPhotoStatus] = useState<keyof Copy>()
   const [percent, setPercent] = useState(0)
   const [selected, setSelected] = useState('')
@@ -71,6 +78,24 @@ function App() {
   const saved = data.words.map(word => word.text)
   const difficult = saved.filter(word => Object.hasOwn(data.progress, word) && data.progress[word] !== 'correct')
   const chosen = data.words.find(word => word.text === selected)
+  const englishVoices = rankedEnglishVoices(availableVoices, data.accent)
+  const selectedVoice = englishVoices.find(voice => voiceKey(voice) === data.voice)
+  const automaticVoice = (navigator.onLine ? englishVoices : englishVoices.filter(voice => voice.localService))[0]
+  const previewWord = saved[0] ?? 'beautiful'
+
+  useEffect(() => {
+    const synth = window.speechSynthesis
+    if (!synth) return
+    const refresh = () => setAvailableVoices(synth.getVoices())
+    const refreshWhenVisible = () => { if (!document.hidden) refresh() }
+    refresh()
+    synth.addEventListener('voiceschanged', refresh)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      synth.removeEventListener('voiceschanged', refresh)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [])
 
   useEffect(() => {
     document.documentElement.lang = data.language
@@ -143,15 +168,17 @@ function App() {
   const speak = (word: string, slow = false) => {
     const synth = window.speechSynthesis
     if (!synth || !window.SpeechSynthesisUtterance) return setNotice(t.noVoice)
-    synth.cancel()
     const voice = new SpeechSynthesisUtterance(word)
     const voices = synth.getVoices()
-    const english = voices.filter(item => /^en(?:[-_]|$)/i.test(item.lang))
-    const preferred = english.find(item => item.lang.replace('_', '-') === data.accent) ?? english[0]
-    if (voices.length && !preferred) return setNotice(t.noVoice)
+    const english = rankedEnglishVoices(voices, data.accent)
+    const playable = navigator.onLine ? english : english.filter(item => item.localService)
+    const preferred = playable.find(item => voiceKey(item) === data.voice) ?? playable[0]
+    if (voices.length && !preferred) return setNotice(!navigator.onLine && english.length ? t.voiceOffline : t.noVoice)
+    utteranceRef.current = null
+    synth.cancel()
     if (preferred) voice.voice = preferred
-    voice.lang = preferred?.lang ?? data.accent
-    voice.rate = slow ? 0.65 : 0.95
+    voice.lang = preferred?.lang.replaceAll('_', '-') ?? data.accent
+    voice.rate = slow ? data.slowRate / 100 : 1
     utteranceRef.current = voice
     setSpeaking(word)
     setNotice('')
@@ -164,7 +191,7 @@ function App() {
       if (utteranceRef.current !== voice) return
       utteranceRef.current = null
       setSpeaking('')
-      if (!['interrupted', 'canceled'].includes(event.error)) setNotice(t.noVoice)
+      if (!['interrupted', 'canceled'].includes(event.error)) setNotice(event.error === 'network' ? t.voiceOffline : t.noVoice)
     }
     synth.speak(voice)
   }
@@ -189,6 +216,15 @@ function App() {
   }
   const titles = { photo: t.photo, live: t.live, settings: t.settings, bulk: t.manageWords, word: t.options, practice: t.practice }
   const busy = photoStatus === 'loading' || photoStatus === 'scanning'
+  const slowSpeed = <label className="speed-field">
+    <span>{t.slowSpeed} <strong>{data.slowRate}%</strong></span>
+    <input type="range" min="45" max="95" step="5" value={data.slowRate}
+      aria-label={t.slowSpeed} aria-valuetext={`${data.slowRate}%`}
+      onChange={event => {
+        const slowRate = event.target.valueAsNumber
+        setData(current => ({ ...current, slowRate }))
+      }} />
+  </label>
   const scanChoice = <label className="scan-choice">{t.sheetLanguage}
     <select value={data.scanMode} disabled={busy} onChange={event => {
       const scanMode = event.target.value as ScanMode
@@ -213,7 +249,10 @@ function App() {
     <header className="topbar">
       <div className="topbar-inner">
         <div className="brand"><span className="brand-icon"><AudioLines size={21} /></span>{t.name}</div>
-        <button className="icon-button settings-button" aria-label={t.settings} onClick={() => setPanel('settings')}><Settings2 size={21} /></button>
+        <button className="icon-button settings-button" aria-label={t.settings} onClick={() => {
+          setAvailableVoices(window.speechSynthesis?.getVoices() ?? [])
+          setPanel('settings')
+        }}><Settings2 size={21} /></button>
       </div>
     </header>
     <main className="shell">
@@ -314,6 +353,7 @@ function App() {
           <button className="button primary">{t.save}</button>
         </form>
         <div className="stack word-tools">
+          {slowSpeed}
           <button className="button secondary" onClick={() => speak(selected, true)}><Volume2 size={18} />{t.slow}</button>
           <button className="button secondary" onClick={() => {
             setData(current => ({ ...current, words: current.words.map(word => word.text === selected ? { ...word, learned: !word.learned } : word) }))
@@ -332,6 +372,21 @@ function App() {
         <label>{t.accent}<select value={data.accent} onChange={event => setData({ ...data, accent: event.target.value as Data['accent'] })}>
           <option value="en-GB">English (UK)</option><option value="en-US">English (US)</option>
         </select></label>
+        <label>{t.voiceName}<select value={selectedVoice ? data.voice : ''} onChange={event => {
+          const voice = event.target.value
+          setData(current => ({ ...current, voice }))
+        }}>
+          <option value="">{t.autoVoice}{automaticVoice ? ` · ${automaticVoice.name}` : ''}</option>
+          {englishVoices.map(voice => <option key={voiceKey(voice)} value={voiceKey(voice)}>
+            {voice.name} ({voice.lang}){voice.localService ? '' : ` · ${t.onlineVoice}`}
+          </option>)}
+        </select></label>
+        <p className="muted">{englishVoices.length ? t.voiceHint : t.voiceUnavailable}</p>
+        {slowSpeed}
+        <div className="practice-controls voice-preview">
+          <button className="button secondary" onClick={() => speak(previewWord)}><Volume2 size={18} />{t.previewVoice}</button>
+          <button className="button secondary" onClick={() => speak(previewWord, true)}>{t.slow}</button>
+        </div>
         <label>{t.theme}<select value={data.theme} onChange={event => setData({ ...data, theme: event.target.value as Data['theme'] })}>
           <option value="system">{t.system}</option><option value="light">{t.light}</option><option value="dark">{t.dark}</option>
         </select></label>
@@ -346,7 +401,7 @@ function App() {
       {panel === 'practice' && <Practice key={session.id} t={t} words={session.words} accent={data.accent} speak={speak} restart={start}
         record={(word, outcome) => setData(current => ({ ...current, progress: { ...current.progress, [word]: outcome } }))}
         complete={() => setData(current => ({ ...current, sessions: current.sessions + 1 }))} />}
-      {notice === t.noVoice && <p role="alert">{notice}</p>}
+      {(notice === t.noVoice || notice === t.voiceOffline) && <p role="alert">{notice}</p>}
     </DialogBody>}
   </>
 }

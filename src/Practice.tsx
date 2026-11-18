@@ -119,6 +119,7 @@ export function Practice({ t, words, accent, speak, record, complete, restart }:
       </div>}
       <div className="practice-controls">
         <button className="button secondary" disabled={!!listening} onClick={() => speak(word)}><Volume2 size={18} />{t.listen}</button>
+        <button className="button secondary" disabled={!!listening} onClick={() => speak(word, true)}>{t.slow}</button>
         {result && <button className="button primary" disabled={!!listening} onClick={() => {
           setError(undefined)
           if (index + 1 === words.length) {
