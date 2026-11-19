@@ -89,7 +89,7 @@ function App() {
   useEffect(() => {
     const synth = window.speechSynthesis
     if (!synth) return
-    const refresh = () => setAvailableVoices(synth.getVoices())
+    const refresh = () => setAvailableVoices([...synth.getVoices()])
     const refreshWhenVisible = () => { if (!document.hidden) refresh() }
     refresh()
     synth.addEventListener('voiceschanged', refresh)
@@ -172,29 +172,40 @@ function App() {
   const speak = (word: string, slow = false) => {
     const synth = window.speechSynthesis
     if (!synth || !window.SpeechSynthesisUtterance) return setNotice({ key: 'noVoice' })
-    const preferred = chooseVoice(synth.getVoices(), data.accent, data.voice, navigator.onLine)
-    if (!preferred) return setNotice({ key: navigator.onLine ? 'noVoice' : 'voiceOffline' })
-    const voice = new SpeechSynthesisUtterance(word)
+    const deviceVoices = synth.getVoices()
+    const preferred = chooseVoice(deviceVoices, data.accent, data.voice, navigator.onLine)
+    if (!preferred && deviceVoices.length) return setNotice({ key: navigator.onLine ? 'noVoice' : 'voiceOffline' })
+    const fallback = preferred && chooseVoice(
+      deviceVoices.filter(voice => voice.voiceURI !== preferred.voiceURI), data.accent, data.voice, false,
+    )
     utteranceRef.current = null
-    synth.cancel()
-    voice.voice = preferred
-    voice.lang = preferred.lang.replaceAll('_', '-')
-    voice.rate = slow ? data.slowRate / 100 : 1
-    utteranceRef.current = voice
+    if (synth.speaking || synth.pending) synth.cancel()
     setSpeaking(word)
     setNotice(undefined)
-    voice.onend = () => {
-      if (utteranceRef.current !== voice) return
-      utteranceRef.current = null
-      setSpeaking('')
+    const play = (deviceVoice?: SpeechSynthesisVoice, retry?: SpeechSynthesisVoice) => {
+      const voice = new SpeechSynthesisUtterance(word)
+      if (deviceVoice) voice.voice = deviceVoice
+      voice.lang = deviceVoice?.lang.replaceAll('_', '-') ?? data.accent
+      voice.rate = slow ? data.slowRate / 100 : 1
+      utteranceRef.current = voice
+      const finish = (error?: string) => {
+        if (utteranceRef.current !== voice) return
+        if (retry && (error === 'network' || error === 'voice-unavailable' || error === 'synthesis-failed')) {
+          return play(retry)
+        }
+        utteranceRef.current = null
+        setSpeaking('')
+        if (error && !['interrupted', 'canceled'].includes(error)) setNotice({ key: error === 'network' ? 'voiceOffline' : 'noVoice' })
+      }
+      voice.onend = () => finish()
+      voice.onerror = event => finish(event.error)
+      try {
+        synth.speak(voice)
+      } catch {
+        finish('synthesis-failed')
+      }
     }
-    voice.onerror = event => {
-      if (utteranceRef.current !== voice) return
-      utteranceRef.current = null
-      setSpeaking('')
-      if (!['interrupted', 'canceled'].includes(event.error)) setNotice({ key: event.error === 'network' ? 'voiceOffline' : 'noVoice' })
-    }
-    synth.speak(voice)
+    play(preferred, fallback)
   }
 
   const start = (words: string[]) => {
@@ -388,8 +399,8 @@ function App() {
         <p className="muted">{voices.length ? t.voiceHint : t.voiceUnavailable}</p>
         {slowSpeed}
         <div className="practice-controls voice-preview">
-          <button className="button secondary" disabled={!voices.length} onClick={() => speak(previewWord)}><Volume2 size={18} />{t.previewVoice}</button>
-          <button className="button secondary" disabled={!voices.length} onClick={() => speak(previewWord, true)}>{t.slow}</button>
+          <button className="button secondary" onClick={() => speak(previewWord)}><Volume2 size={18} />{t.previewVoice}</button>
+          <button className="button secondary" onClick={() => speak(previewWord, true)}>{t.slow}</button>
         </div>
         <label>{t.theme}<select value={data.theme} onChange={event => setData({ ...data, theme: event.target.value as Data['theme'] })}>
           <option value="system">{t.system}</option><option value="light">{t.light}</option><option value="dark">{t.dark}</option>

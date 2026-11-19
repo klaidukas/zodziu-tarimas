@@ -21,10 +21,11 @@ const profiles: VoiceProfile[] = [
 ]
 
 const qualityNames = /\b(natural|neural|enhanced|premium|wavenet|online)\b/i
-const effects = /\b(bubbles?|bells?|whisper|novelty|robot|sound effects?)\b/i
+const effects = /\b(bubbles?|bells?|whisper|novelty|robot|sound effects?|bad news|good news|boing|cellos|deranged|hysterical|junior|organ|trinoids|zarvox|fred)\b/i
+const normalizeLocale = (locale: string) => locale.replaceAll('_', '-').toLowerCase()
 
 function matches(voice: SpeechSynthesisVoice, profile: VoiceProfile) {
-  return voice.lang.replaceAll('_', '-').toLowerCase() === profile.locale.toLowerCase() &&
+  return normalizeLocale(voice.lang) === normalizeLocale(profile.locale) &&
     !effects.test(voice.name) && profile.names.test(voice.name)
 }
 
@@ -51,8 +52,13 @@ export function voiceLabel(profile: VoiceProfile, copy: Copy) {
 
 export function chooseVoice(voices: SpeechSynthesisVoice[], preferredLocale: string, selection: string, online: boolean) {
   const profile = savedProfile(selection, voices)
-  const choices = voiceChoices(online ? voices : voices.filter(voice => voice.localService), preferredLocale)
+  const playable = voices.filter(voice => (online || voice.localService) &&
+    /^en(?:-|$)/.test(normalizeLocale(voice.lang)) && !effects.test(voice.name))
+  const choices = voiceChoices(playable, preferredLocale)
   const selected = choices.find(choice => choice.id === profile)
   const previous = selected?.options.find(item => JSON.stringify([item.voiceURI, item.lang, item.name]) === selection)
-  return previous ?? selected?.options[0] ?? choices[0]?.options[0]
+  const score = (voice: SpeechSynthesisVoice) =>
+    (normalizeLocale(voice.lang) === normalizeLocale(preferredLocale) ? 8 : 0) +
+    (qualityNames.test(voice.name) ? 4 : 0) + (voice.default ? 2 : 0) + (voice.localService ? 1 : 0)
+  return previous ?? selected?.options[0] ?? choices[0]?.options[0] ?? playable.sort((a, b) => score(b) - score(a))[0]
 }
